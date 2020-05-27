@@ -1,5 +1,6 @@
-﻿import gzip
+import gzip
 import random
+import xbmcvfs
 from time import sleep
 from StringIO import StringIO
 from xml.etree import ElementTree
@@ -47,7 +48,7 @@ class BSPlayer(object):
             '<ns1:{func_name}>{params}</ns1:{func_name}></SOAP-ENV:Body></SOAP-ENV:Envelope>'
         ).format(search_url=self.search_url, func_name=func_name, params=params)
 
-        log('BSPlayer.api_request', 'Sending request: %s.' % func_name)
+        log('BSPlayer.api_request', 'Sending request: %s with params: %s' % (func_name,params))
         for i in xrange(tries):
             try:
                 self.session.addheaders.extend(headers.items())
@@ -138,7 +139,7 @@ class BSPlayer(object):
         return subtitles
 
     @staticmethod
-    def download_subtitles(download_url, dest_path, proxies=None):
+    def download_subtitles(download_url, dest_path, FinalFile, proxies=None):
         session = get_session(proxies=proxies, http_10=True)
         session.addheaders = [('User-Agent', 'Mozilla/4.0 (compatible; Synapse)'),
                              ('Content-Length', 0)]
@@ -149,5 +150,7 @@ class BSPlayer(object):
                 f.write(gf.read())
                 f.flush()
             gf.close()
+            success = xbmcvfs.copy(dest_path, FinalFile)
+            log("BSPlayer.download", "Parallel saved file from %s to %s" % (dest_path,FinalFile))
             return True
         return False

@@ -25,6 +25,28 @@ __profile__ = xbmc.translatePath(__addon__.getAddonInfo('profile')).decode("utf-
 __resource__ = xbmc.translatePath(path.join(__cwd__, 'resources', 'lib')).decode("utf-8")
 __temp__ = xbmc.translatePath(path.join(__profile__, 'temp', '')).decode("utf-8")
 
+#########################################################################
+import os
+import json
+PlayingFile =  str(xbmc.Player().getPlayingFile()) 
+PlayingFile_Path =  str(xbmc.Player().getVideoInfoTag().getPath())
+
+PlayingFile_no_ext, PlayingFile_extension = os.path.splitext(PlayingFile) 
+Name_no_ext=PlayingFile_no_ext.split(PlayingFile_Path,1)[1] 
+
+apistoragemode=xbmc.executeJSONRPC('{"jsonrpc":"2.0","method":"Settings.GetSettingValue", "params":{"setting":"subtitles.storagemode"},"id":1}')
+jsonstoragemode = json.loads(apistoragemode)
+storagemode=jsonstoragemode['result']['value']
+
+apicustompath=xbmc.executeJSONRPC('{"jsonrpc":"2.0","method":"Settings.GetSettingValue", "params":{"setting":"subtitles.custompath"},"id":1}')
+jsoncustompath = json.loads(apicustompath)
+custompath=jsoncustompath['result']['value']
+
+if str(storagemode) == "1" and custompath and custompath.strip():
+    FinalPath=custompath
+else:
+    FinalPath=PlayingFile_Path
+#########################################################################
 
 params = get_params()
 log("BSPlayer.params", "Current Action: %s." % params['action'])
@@ -36,28 +58,31 @@ if params['action'] == 'search':
 
     log("BSPlayer.video_path", "Current Video Path: %s." % video_path)
     languages = get_languages_dict(params['languages'])
-    log("BSPlayer.languages", "Current Languages: %s." % languages)
+    preferredlanguage = xbmc.convertLanguage(params['preferredlanguage'], xbmc.ISO_639_2)
+    log("BSPlayer.languages", "Current Languages: %s. Preferred_language: %s." % (languages, preferredlanguage))
 
     with BSPlayer() as bsp:
         subtitles = bsp.search_subtitles(video_path, language_ids=languages.keys())
-        for subtitle in sorted(subtitles, key=lambda s: s['subLang']):
-            list_item = xbmcgui.ListItem(
-                label=languages[subtitle['subLang']],
-                label2=subtitle['subName'],
-                thumbnailImage=xbmc.convertLanguage(subtitle["subLang"], xbmc.ISO_639_1)
+    for subtitle in sorted(subtitles, key=lambda s: [not s['subLang'] == preferredlanguage,s['subLang']]):
+        list_item = xbmcgui.ListItem(
+            label=languages[subtitle['subLang']],
+            label2=subtitle['subName'],
+            thumbnailImage=xbmc.convertLanguage(subtitle["subLang"], xbmc.ISO_639_1)
             )
-
-            plugin_url = "plugin://{path}/?{query}".format(
-                path=__scriptid__,
-                query=urllib.urlencode(dict(
-                    action='download',
-                    link=subtitle['subDownloadLink'],
-                    file_name=subtitle['subName'],
-                    format=subtitle['subFormat']
-                ))
-            )
-            log("BSPlayer.plugin_url", "Plugin Url Created: %s." % plugin_url)
-            xbmcplugin.addDirectoryItem(handle=int(sys.argv[1]), url=plugin_url, listitem=list_item, isFolder=False)
+        plugin_url = "plugin://{path}/?{query}".format(
+            path=__scriptid__,
+            query=urllib.urlencode(dict(
+                action='download',
+                link=subtitle['subDownloadLink'],
+                file_name=subtitle['subName'],
+                format=subtitle['subFormat'],
+                lang=xbmc.convertLanguage(subtitle["subLang"],xbmc.ISO_639_1),
+                FinalPath=FinalPath,
+                Name_no_ext=Name_no_ext
+            ))
+        )
+        log("BSPlayer.plugin_url", "Plugin Url Created: %s." % plugin_url)
+        xbmcplugin.addDirectoryItem(handle=int(sys.argv[1]), url=plugin_url, listitem=list_item, isFolder=False)
 elif params['action'] == 'manualsearch':
     notify(__scriptname__, __language__, 32002)
     log("BSPlayer.manualsearch", "Manual search not supported.")
@@ -68,7 +93,8 @@ elif params['action'] == 'download':
 
     if params['format'] in ["srt", "sub", "txt", "smi", "ssa", "ass"]:
         subtitle_path = path.join(__temp__, params['file_name'])
-        if BSPlayer.download_subtitles(params['link'], subtitle_path):
+        FinalFile = os.path.join(params['FinalPath'], "%s.%s.%s" %(params['Name_no_ext'],params['lang'],params['format']))
+        if BSPlayer.download_subtitles(params['link'], subtitle_path, FinalFile):
             log("BSPlayer.download_subtitles", "Subtitles Download Successfully From: %s." % params['link'])
             list_item = xbmcgui.ListItem(label=subtitle_path)
             log("BSPlayer.download", "Downloaded Subtitle Path: %s" % subtitle_path)
