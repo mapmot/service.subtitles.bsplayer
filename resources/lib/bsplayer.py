@@ -2,10 +2,10 @@ import gzip
 import random
 import xbmcvfs
 from time import sleep
-from StringIO import StringIO
+from io import BytesIO
 from xml.etree import ElementTree
 
-from utils import movie_size_and_hash, get_session, log
+from .utils import movie_size_and_hash, get_session, log
 
 # s1-9, s101-109
 SUB_DOMAINS = ['s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8', 's9',
@@ -46,15 +46,15 @@ class BSPlayer(object):
             'xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:ns1="{search_url}">'
             '<SOAP-ENV:Body SOAP-ENV:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">'
             '<ns1:{func_name}>{params}</ns1:{func_name}></SOAP-ENV:Body></SOAP-ENV:Envelope>'
-        ).format(search_url=self.search_url, func_name=func_name, params=params)
+        ).format(search_url=self.search_url, func_name=func_name, params=params).encode('utf-8')
 
         log('BSPlayer.api_request', 'Sending request: %s with params: %s' % (func_name,params))
-        for i in xrange(tries):
+        for i in range(tries):
             try:
                 self.session.addheaders.extend(headers.items())
                 res = self.session.open(self.search_url, data)
-                return ElementTree.fromstring(res.read())
-            except Exception, ex:
+                return ElementTree.fromstring(res.read().decode('utf-8'))
+            except Exception as ex:
                 log("BSPlayer.api_request", "ERROR: %s." % ex)
                 if func_name == 'logIn':
                     self.search_url = get_sub_domain()
@@ -100,7 +100,7 @@ class BSPlayer(object):
         if not self.login():
             return None
 
-        if isinstance(language_ids, (tuple, list, set)):
+        if isinstance(language_ids, (tuple, list, set, type({}.keys()))):
             language_ids = ",".join(language_ids)
 
         movie_size, movie_hash = movie_size_and_hash(movie_path)
@@ -145,7 +145,7 @@ class BSPlayer(object):
                              ('Content-Length', 0)]
         res = session.open(download_url)
         if res:
-            gf = gzip.GzipFile(fileobj=StringIO(res.read()))
+            gf = gzip.GzipFile(fileobj=BytesIO(res.read()))
             with open(dest_path, 'wb') as f:
                 f.write(gf.read())
                 f.flush()

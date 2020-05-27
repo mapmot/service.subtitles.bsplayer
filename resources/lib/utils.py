@@ -1,17 +1,19 @@
 import sys
 import struct
-import urllib2
-import urlparse
-import cookielib
+import urllib.request
+from urllib.parse import urlparse
+from urllib.parse import parse_qsl
+from urllib.parse import unquote
+import http.cookiejar
 from os import path
-from httplib import HTTPConnection
+from http.client import HTTPConnection
 
 import xbmc
 import xbmcvfs
 
 
 def log(module, msg):
-    xbmc.log((u"### [%s] - %s" % (module, msg)).encode('utf-8'), level=xbmc.LOGDEBUG)
+    xbmc.log((u"### [%s] - %s" % (module, msg)), level=xbmc.LOGDEBUG)
 
 
 def notify(script_name, language, string_id):
@@ -20,11 +22,11 @@ def notify(script_name, language, string_id):
 
 def get_params(params_str=""):
     params_str = params_str or sys.argv[2]
-    return dict(urlparse.parse_qsl(params_str.lstrip('?')))
+    return dict(parse_qsl(params_str.lstrip('?')))
 
 
 def get_video_path(xbmc_path=''):
-    xbmc_path = xbmc_path or urlparse.unquote(xbmc.Player().getPlayingFile().decode('utf-8'))
+    xbmc_path = xbmc_path or unquote(xbmc.Player().getPlayingFile())
     if xbmc_path.startswith('rar://'):
         return path.dirname(xbmc_path.replace('rar://', ''))
     elif xbmc_path.startswith('stack://'):
@@ -50,7 +52,7 @@ class HTTP10Connection(HTTPConnection):
     _http_vsn_str = "HTTP/1.0"
 
 
-class HTTP10Handler(urllib2.HTTPHandler):
+class HTTP10Handler(urllib.request.HTTPHandler):
     def http_open(self, req):
         return self.do_open(HTTP10Connection, req)
 
@@ -58,13 +60,13 @@ class HTTP10Handler(urllib2.HTTPHandler):
 def get_session(proxies=None, cookies=True, http_10=False):
     handlers = []
     if proxies:
-        handlers.append(urllib2.ProxyHandler(proxies))
+        handlers.append(urllib.request.ProxyHandler(proxies))
     if cookies:
-        cj = cookielib.CookieJar()
-        handlers.append(urllib2.HTTPCookieProcessor(cj))
+        cj = http.cookiejar.CookieJar()
+        handlers.append(urllib.request.HTTPCookieProcessor(cj))
     if http_10:
         handlers.append(HTTP10Handler)
-    return urllib2.build_opener(*handlers)
+    return urllib.request.build_opener(*handlers)
 
 
 def __get_last_split(firs_rar_file, x):
@@ -77,7 +79,7 @@ def __get_last_split(firs_rar_file, x):
     return firs_rar_file[0:-2] + ('%02d' % (x - 1))
 
 
-def __add_file_hash(name, file_hash, seek):
+def __add_file_hash(name, file_hash, seek):    #this also need to be modiffied 
     f = xbmcvfs.File(name)
     f.seek(max(0, seek), 0)
     for i in range(8192):
@@ -87,7 +89,7 @@ def __add_file_hash(name, file_hash, seek):
     return file_hash
 
 
-def __movie_size_and_hash_rar(firs_rar_file):
+def __movie_size_and_hash_rar(firs_rar_file):    #this also need to be modiffied 
     log('utils.movie_size_and_hash', 'Hashing Rar file...')
     f = xbmcvfs.File(firs_rar_file)
     a = f.read(4)
@@ -120,7 +122,6 @@ def __movie_size_and_hash_rar(firs_rar_file):
     log('utils.movie_size_and_hash', 'ERROR: Not Body part in rar file.')
     raise Exception('ERROR: Not Body part in rar file.')
 
-
 def movie_size_and_hash(file_path):
     file_ext = path.splitext(file_path)[1]
     if file_ext == '.rar' or file_ext == '.001':
@@ -129,28 +130,27 @@ def movie_size_and_hash(file_path):
     longlong_format = '<q'  # little-endian long long
     byte_size = struct.calcsize(longlong_format)
 
-    f = xbmcvfs.File(file_path)
-    file_size = f.size()
-    movie_hash = file_size
+    with xbmcvfs.File(file_path) as f:
+        file_size = f.size()
+        movie_hash = file_size
 
-    if file_size < 65536 * 2:
+        if file_size < 65536 * 2:
+            f.close()
+            log('utils.movie_size_and_hash', "ERROR: SizeError (%d)." % file_size)
+            raise Exception("SizeError")
+
+        for x in range(int(65536 / byte_size)):
+            buff = f.readBytes(byte_size)
+            (l_value,) = struct.unpack(longlong_format, buff)
+            movie_hash += l_value
+            movie_hash &= 0xFFFFFFFFFFFFFFFF  # to remain as 64bit number
+
+        f.seek(max(0, file_size - 65536), 0)
+        for x in range(int(65536 / byte_size)):
+            buff = f.readBytes(byte_size)
+            (l_value,) = struct.unpack(longlong_format, buff)
+            movie_hash += l_value
+            movie_hash &= 0xFFFFFFFFFFFFFFFF
+        returned_movie_hash = "%016x" % movie_hash
         f.close()
-        log('utils.movie_size_and_hash', "ERROR: SizeError (%d)." % file_size)
-        raise Exception("SizeError")
-
-    for x in range(65536 / byte_size):
-        buff = f.read(byte_size)
-        (l_value,) = struct.unpack(longlong_format, buff)
-        movie_hash += l_value
-        movie_hash &= 0xFFFFFFFFFFFFFFFF  # to remain as 64bit number
-
-    f.seek(max(0, file_size - 65536), 0)
-    for x in range(65536 / byte_size):
-        buff = f.read(byte_size)
-        (l_value,) = struct.unpack(longlong_format, buff)
-        movie_hash += l_value
-        movie_hash &= 0xFFFFFFFFFFFFFFFF
-    returned_movie_hash = "%016x" % movie_hash
-    f.close()
-
-    return file_size, returned_movie_hash
+    return file_size, returned_movie_hash 

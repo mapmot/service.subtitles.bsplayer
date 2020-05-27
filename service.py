@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import sys
-import urllib
+import urllib.parse
 import shutil
 from os import path
 
@@ -20,10 +20,10 @@ __scriptname__ = __addon__.getAddonInfo('name')
 __version__ = __addon__.getAddonInfo('version')
 __language__ = __addon__.getLocalizedString
 
-__cwd__ = xbmc.translatePath(__addon__.getAddonInfo('path')).decode("utf-8")
-__profile__ = xbmc.translatePath(__addon__.getAddonInfo('profile')).decode("utf-8")
-__resource__ = xbmc.translatePath(path.join(__cwd__, 'resources', 'lib')).decode("utf-8")
-__temp__ = xbmc.translatePath(path.join(__profile__, 'temp', '')).decode("utf-8")
+__cwd__ = xbmc.translatePath(__addon__.getAddonInfo('path'))
+__profile__ = xbmc.translatePath(__addon__.getAddonInfo('profile'))
+__resource__ = xbmc.translatePath(path.join(__cwd__, 'resources', 'lib'))
+__temp__ = xbmc.translatePath(path.join(__profile__, 'temp', ''))
 
 #########################################################################
 import os
@@ -66,12 +66,12 @@ if params['action'] == 'search':
     for subtitle in sorted(subtitles, key=lambda s: [not s['subLang'] == preferredlanguage,s['subLang']]):
         list_item = xbmcgui.ListItem(
             label=languages[subtitle['subLang']],
-            label2=subtitle['subName'],
-            thumbnailImage=xbmc.convertLanguage(subtitle["subLang"], xbmc.ISO_639_1)
-            )
+            label2=subtitle['subName']   
+        )
+        list_item.setArt( { "icon" : "0", "thumb" : xbmc.convertLanguage(subtitle["subLang"], xbmc.ISO_639_1) } )
         plugin_url = "plugin://{path}/?{query}".format(
             path=__scriptid__,
-            query=urllib.urlencode(dict(
+            query=urllib.parse.urlencode(dict(
                 action='download',
                 link=subtitle['subDownloadLink'],
                 file_name=subtitle['subName'],
